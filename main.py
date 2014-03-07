@@ -10,11 +10,19 @@ import random
 class Model:
     def __init__(self,screen):
         self.screen = screen
+        self.buttons = Group(Button(700,450,"1P"),Button(900,450,"2P"))
+
+    def initGame(self):
         self.map = {}
         self.blocks = Group()
-        self.player = Player(25,825)
         self.players = Group()
-        self.players.add(self.player)
+        self.player1 = Player(25,825,1)
+        self.players.add(self.player1)
+        if self.playernum == 2:
+            self.player2 = Player(1575,75,2)
+            self.players.add(self.player2)
+        else:
+            self.player2 = False
 
     def createMap(self):
         map = {}
@@ -22,7 +30,7 @@ class Model:
             for columns in xrange(0,(size[0]/50)):
                 if rows == (size[1]/50)-1 or rows == 0:
                     map.update({(rows,columns):"block"})
-                elif(rows%5 == 0):
+                elif(rows%3 == 0):
                     map.update({(rows,columns):random.choice(map_options)})
                 else:
                     map.update({(rows,columns):"empty"})
@@ -33,33 +41,97 @@ class Model:
         for position, contain in self.map.items():
             if contain is "block":
                 self.blocks.add(Block(position[1]*50,position[0]*50))
-
-    def draw(self):
-        self.screen.fill(blackColor)
-        self.blocks.draw(self.screen)
-        self.players.draw(self.screen)
-
+        
     def update(self):
         self.blocks.update()
         self.players.update()
 
-    def checkPlayerBlockCollisions(self,players,blocks):
+    def checkPlayerBlockCollisions(self,player,blocks):
 
-        print self.player.onGround
-        for collision in spritecollide(self.player, self.blocks, False):
-            print "COLISION!!!"
+        for collision in spritecollide(player, blocks, False):
 
-            if 22 <= abs(self.player.rect.bottom - collision.rect.centery) <= 25:
-                self.player.onGround = True
-            if abs(self.player.rect.bottom - collision.rect.centery) < 25:
-                self.player.onGround = True
-            elif self.player.rect.top - collision.rect.centery < 25:
-                self.player.hittingCeilling = True
-            if abs(self.player.rect.right - collision.rect.centerx) < 27 and abs(self.player.rect.centery - collision.rect.centery) < 30:
-                self.player.hittingWallRight = True
-            if abs(self.player.rect.left - collision.rect.centerx) < 27 and abs(self.player.rect.centery - collision.rect.centery) < 30:
-                self.player.hittingWallLeft = True
-        print self.player.onGround
+            if 21 <= abs(player.rect.bottom - collision.rect.centery) <= 26:
+                player.onGround = True
+            elif player.rect.top - collision.rect.centery < 25:
+                player.hittingCeilling = True
+            if abs(player.rect.right - collision.rect.centerx) < 27 and abs(player.rect.centery - collision.rect.centery) < 30:
+                player.hittingWallRight = True
+            if abs(player.rect.left - collision.rect.centerx) < 27 and abs(player.rect.centery - collision.rect.centery) < 30:
+                player.hittingWallLeft = True
+
+class View():
+    def __init__(self,screen, model):
+        self.screen = screen
+        self.screen.fill(blackColor)
+        self.model = model
+
+
+    def displayStartScreen(self):
+        self.model.buttons.draw(self.screen)
+        pygame.display.update()
+
+
+    def update(self):
+        self.screen.fill(blackColor)
+        self.model.blocks.draw(self.screen)
+        self.model.players.draw(self.screen)
+        self.model.buttons.draw(self.screen)
+        pygame.display.update()
+
+
+class Controller():
+    def __init__(self,model):
+        self.model = model
+
+    def checkPlayerSelection(self):
+        starting = True
+        for button in self.model.buttons.sprites():
+            if button.rect.collidepoint(mouse.get_pos()) and mouse.get_pressed()[0]:
+                if button.function == "1P":
+                    self.model.playernum = 1
+                    print self.model.playernum
+                    starting = False
+                else:
+                    self.model.playernum = 2
+                    print self.model.playernum
+                    starting = False
+
+
+        for event in pygame.event.get():
+            if event.type == KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    return "Quit"
+
+        return starting
+
+
+    def handleOneTimeKeys(self):
+        running = True
+        for event in pygame.event.get():
+            if event.type == KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    running = False
+                if event.key == pygame.K_UP and self.model.player1.jumpCount < 3:
+                    self.model.player1.jump()
+                    self.model.player1.jumpCount +=1
+                if self.model.playernum == 2 and event.key == pygame.K_w and self.model.player2.jumpCount < 3:
+                    self.model.player2.jump()
+                    self.model.player2.jumpCount +=1
+        return running
+
+    def handleHeldKeys(self):
+        self.keys = pygame.key.get_pressed()
+
+        if self.keys[pygame.K_RIGHT]: 
+            m.player1.moveForward()
+        elif self.keys[pygame.K_LEFT]:
+            m.player1.moveBackward()
+
+        if self.model.playernum == 2:
+            if self.keys[pygame.K_d]: 
+                m.player2.moveForward()
+            elif self.keys[pygame.K_a]:
+                m.player2.moveBackward()
 
 
 class Block(Sprite):
@@ -73,14 +145,30 @@ class Block(Sprite):
         self.rect.left = x
         self.rect.top  = y
 
-class Player(Sprite):
-    """docstring for Player"""
-    def __init__(self, x,y,picture = "Pictures/testSprite.png"):
+class Button(Sprite):
+    def __init__(self,x,y,function,picture = "Pictures/CobbleStoneBlock.png"):
         Sprite.__init__(self)
 
-        self.image = pygame.image.load(picture)
-        self.rect  = self.image.get_rect()
-        self.mask  = pygame.mask.from_surface(self.image)
+        self.image       = pygame.image.load(picture)
+        self.rect        = self.image.get_rect()
+        self.mask        = pygame.mask.from_surface(self.image)
+        self.function    = function
+        self.rect.center = (x,y)
+
+class Player(Sprite):
+    """docstring for Player"""
+    def __init__(self, x,y, playernum,picture = "Pictures/testSprite.png"):
+        Sprite.__init__(self)
+
+        if playernum == 1:
+            self.image = pygame.image.load(picture)
+            self.rect  = self.image.get_rect()
+            self.mask  = pygame.mask.from_surface(self.image)
+        else:
+            self.image = pygame.image.load(picture)
+            self.image = transform.flip(self.image,True,False)
+            self.rect  = self.image.get_rect()
+            self.mask  = pygame.mask.from_surface(self.image)
 
 
         self.x      =  x
@@ -109,23 +197,25 @@ class Player(Sprite):
         self.hittingWallRight = False
         self.hittingWallLeft  = False
 
-        self.jumpCount = 0
+        self.jumpCount        = 0
         self.terminalVelocity = 3
 
 
     def moveForward(self):
-        self.vx = 3
+        if self.onGround:
+            self.vx = 6
     def moveBackward(self):
-        self.vx = -3
+        if self.onGround:
+            self.vx = -6
     def jump(self):
-        self.vy = -8
+        self.vy = -10
     def setFriction(self):
         if int(self.vx) != 0:
             self.ff = -abs(self.vx)/self.vx*self.mu*abs(self.fn)
         else:
             self.ff = 0
     def setGravity(self):
-        self.fg =  .25*self.mass
+        self.fg =  .5*self.mass
     def setNormalForce(self):
         if self.onGround:
             self.fn = -self.fg
@@ -161,6 +251,7 @@ class Player(Sprite):
 
         self.lastX = self.x
         self.lastY = self.y
+        
         self.x += int(self.vx)
         self.y += int(self.vy)
 
@@ -168,12 +259,6 @@ class Player(Sprite):
         self.hittingCeilling  = False
         self.hittingWallRight = False
         self.hittingWallLeft  = False
-        # print "Force in Y is " + str(self.fy)
-        # print "V in Y is " + str(self.vy)
-        # print "Collision Ground "     + str(self.onGround)
-        # print "Collision Ceilling "   + str(self.hittingCeilling)
-        # print "Collision Wall Left "  + str(self.hittingWallLeft)
-        # print "Collision Wall Right " + str(self.hittingWallRight)
 
         if self.lastVx != 0:
             if self.vx/self.lastVx < 0:
@@ -193,68 +278,61 @@ map_options = ["empty","block"]
 
 pygame.init()
 
-size = (1600,900)
-screen = pygame.display.set_mode(size,pygame.FULLSCREEN)
+screen = pygame.display.set_mode((1600,900),pygame.FULLSCREEN)
+info = pygame.display.Info()
+size = (info.current_w, info.current_h)
 m = Model(screen)
-
-running  = True
+v = View(screen, m)
+c = Controller(m)
+starting = True
+running  = False
 new_room = True
-m.player.setGravity()
+
+while starting:
+    v.displayStartScreen()
+    starting = c.checkPlayerSelection()
+    if starting is "Quit":
+        running = False
+    elif not starting:
+        running = True
+        print "Ending Start Screen"
+    pygame.display.update()
+
+print "Initializing Game"
+if running:
+    m.initGame()
+    m.buttons.remove(m.buttons.sprites())
+    m.update()
+    for player in m.players.sprites():
+        player.setGravity()
 
 while running:
     if new_room:
+        print "Starting Game"
         m.createMap()
         m.drawMap()
         new_room = False
 
-    keys = pygame.key.get_pressed()
-    m.checkPlayerBlockCollisions(m.player, m.blocks)
+    for player in m.players.sprites():
+        m.checkPlayerBlockCollisions(player, m.blocks)                
 
+        player.setNormalForce()
+        player.setFriction()
+    
+        if player.onGround:
+            player.jumpCount = 0
 
-    if keys[pygame.K_ESCAPE]:
-        running = False
-    if m.player.onGround:
-        if keys[pygame.K_RIGHT]: 
-            m.player.moveForward()
-        elif keys[pygame.K_LEFT]:
-            m.player.moveBackward()                
-
-    m.player.setNormalForce()
-    print m.player.onGround
-    m.player.setFriction()
-
-    for event in pygame.event.get():
-        if event.type == QUIT:
-            running = False
-        if event.type == KEYDOWN:
-            if event.key == pygame.K_UP and m.player.jumpCount < 2:
-                m.player.jump()
-                m.player.jumpCount +=1
-            if (m.player.hittingWallRight or m.player.hittingWallLeft):
-                m.player.jumpCount -= 1
-            elif m.player.onGround:
-                m.player.jumpCount = 0
+    c.handleHeldKeys()
+    running = c.handleOneTimeKeys()
 
     m.update()
+   
+    for player in m.players.sprites():
+        player.lastx  = player.x
+        player.lasty  = player.y
+        player.lastVx = player.vx
+        player.lastVy = player.vy
+        player.lastFx = player.fx
+        player.lastFy = player.fy
 
-    m.player.lastx  = m.player.x
-    m.player.lasty  = m.player.y
-    m.player.lastVx = m.player.vx
-    m.player.lastVy = m.player.vy
-    m.player.lastFx = m.player.fx
-    m.player.lastFy = m.player.fy
-
-    m.checkPlayerBlockCollisions(m.player, m.blocks)
-    m.player.setNormalForce()
-    m.player.setFriction()
-    m.update()
-
-    m.player.lastx  = m.player.x
-    m.player.lasty  = m.player.y
-    m.player.lastVx = m.player.vx
-    m.player.lastVy = m.player.vy
-    m.player.lastFx = m.player.fx
-    m.player.lastFy = m.player.fy
-
-    m.draw()
-    pygame.display.update()
+    v.update()

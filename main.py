@@ -1,8 +1,8 @@
 from pygame import *
 from pygame.sprite import *
+from pygame.time import *
 from pygame.locals import *
 import math
-import time
 import random
 
 
@@ -15,11 +15,12 @@ class Model:
     def initGame(self):
         self.map = {}
         self.blocks = Group()
+        self.Coins =Group()
         self.players = Group()
-        self.player1 = Player(25,825,1)
+        self.player1 = Player(75,825,1)
         self.players.add(self.player1)
         if self.playernum == 2:
-            self.player2 = Player(1575,75,2)
+            self.player2 = Player(1525,75,2)
             self.players.add(self.player2)
         else:
             self.player2 = False
@@ -28,12 +29,12 @@ class Model:
         map = {}
         for rows in xrange(0,(size[1]/50)):
             for columns in xrange(0,(size[0]/50)):
-                if rows == (size[1]/50)-1 or rows == 0:
+                if rows == (size[1]/50)-1 or rows == 0 or columns== (size[0]/50)-1 or columns==0:
                     map.update({(rows,columns):"block"})
                 elif(rows%3 == 0):
                     map.update({(rows,columns):random.choice(map_options)})
                 else:
-                    map.update({(rows,columns):"empty"})
+                    map.update({(rows,columns):random.choice(map_options[:1])})
 
         self.map = map
 
@@ -41,10 +42,13 @@ class Model:
         for position, contain in self.map.items():
             if contain is "block":
                 self.blocks.add(Block(position[1]*50,position[0]*50))
+            elif contain is "Coins":
+                self.Coins.add(Coins(position[1]*50+10,position[0]*50+10))
         
     def update(self):
         self.blocks.update()
         self.players.update()
+        self.Coins.update()
 
     def checkPlayerBlockCollisions(self,player,blocks):
 
@@ -54,10 +58,16 @@ class Model:
                 player.onGround = True
             elif player.rect.top - collision.rect.centery < 25:
                 player.hittingCeilling = True
-            if abs(player.rect.right - collision.rect.centerx) < 27 and abs(player.rect.centery - collision.rect.centery) < 30:
+            if abs(player.rect.right - collision.rect.centerx) < 32 and abs(player.rect.centery - collision.rect.centery) < 28:
                 player.hittingWallRight = True
-            if abs(player.rect.left - collision.rect.centerx) < 27 and abs(player.rect.centery - collision.rect.centery) < 30:
+            if abs(player.rect.left - collision.rect.centerx) < 32 and abs(player.rect.centery - collision.rect.centery) < 28:
                 player.hittingWallLeft = True
+
+            print "hittingWallLeft: " + str(self.player1.hittingWallLeft)
+            print "hittingWallRight: " + str(self.player1.hittingWallRight)
+    def checkPlayerCoinsCollisions(self, player, Coins):
+        for collision in spritecollide(player, Coins, True):
+            player.score += 1
 
 class View():
     def __init__(self,screen, model):
@@ -76,7 +86,14 @@ class View():
         self.model.blocks.draw(self.screen)
         self.model.players.draw(self.screen)
         self.model.buttons.draw(self.screen)
+        self.model.Coins.draw(self.screen)
+        p1Score = myfont.render("Player 1 Score:"+str(self.model.player1.score), 1, whiteColor)
+        self.screen.blit(p1Score,(100,15))
+        if self.model.playernum==2:
+            p2Score = myfont.render("Player 2 Score:"+str(self.model.player2.score), 1,whiteColor)
+            self.screen.blit(p2Score,(1200,15))
         pygame.display.update()
+
 
 
 class Controller():
@@ -89,7 +106,6 @@ class Controller():
             if button.rect.collidepoint(mouse.get_pos()) and mouse.get_pressed()[0]:
                 if button.function == "1P":
                     self.model.playernum = 1
-                    print self.model.playernum
                     starting = False
                 else:
                     self.model.playernum = 2
@@ -132,6 +148,28 @@ class Controller():
                 m.player2.moveForward()
             elif self.keys[pygame.K_a]:
                 m.player2.moveBackward()
+
+class Coins(Sprite):
+    def __init__(self, x, y, pictures=["Pictures/Coin1.png","Pictures/Coin2.png","Pictures/Coin3.png","Pictures/Coin4.png","Pictures/Coin5.png","Pictures/Coin6.png","Pictures/Coin7.png","Pictures/Coin8.png"]):
+        Sprite.__init__(self)
+        self.imagecounter = 0
+        self.pictures=pictures
+        self.image     =pygame.image.load(pictures[0])
+        self.rect      =self.image.get_rect()
+        self.mask      =pygame.mask.from_surface(self.image)#not necessary right now, but for later
+
+        self.x = x
+        self.y = y
+        self.rect.left =x
+        self.rect.top  =y
+    def update(self):
+        self.imagecounter +=1
+        if self.imagecounter > 7:
+            self.imagecounter = 0
+        self.image     = pygame.image.load(self.pictures[self.imagecounter])
+        self.rect      = self.image.get_rect()
+        self.rect.left = self.x
+        self.rect.top  = self.y
 
 
 class Block(Sprite):
@@ -198,15 +236,16 @@ class Player(Sprite):
         self.hittingWallLeft  = False
 
         self.jumpCount        = 0
-        self.terminalVelocity = 3
+        self.terminalVelocity = 5
+        self.score            = 0
 
 
     def moveForward(self):
         if self.onGround:
-            self.vx = 6
+            self.vx = 5
     def moveBackward(self):
         if self.onGround:
-            self.vx = -6
+            self.vx = -5
     def jump(self):
         self.vy = -10
     def setFriction(self):
@@ -228,10 +267,10 @@ class Player(Sprite):
             self.vy = 2
         if self.hittingWallRight:
             self.fn = -1
-            self.vx = -3
+            self.vx = -3-.2*abs(self.vx)
         if self.hittingWallLeft:
             self.fn = 1
-            self.vx = 3
+            self.vx = 3+.2*abs(self.vx)
         elif (not self.onGround) and (not self.hittingCeilling) and (not self.hittingWallLeft) and (not self.hittingWallRight):
             self.fn = 0
 
@@ -274,10 +313,11 @@ blueColor  = pygame.Color(0,0,255)
 greenColor = pygame.Color(0,255,0)
 blackColor = pygame.Color(0,0,0)
 
-map_options = ["empty","block"]
+map_options = ["empty","Coins","block"]
 
 pygame.init()
-
+clock = Clock()
+myfont = pygame.font.SysFont("Liberation Mono",35,True, False)
 screen = pygame.display.set_mode((1600,900),pygame.FULLSCREEN)
 info = pygame.display.Info()
 size = (info.current_w, info.current_h)
@@ -295,10 +335,8 @@ while starting:
         running = False
     elif not starting:
         running = True
-        print "Ending Start Screen"
     pygame.display.update()
 
-print "Initializing Game"
 if running:
     m.initGame()
     m.buttons.remove(m.buttons.sprites())
@@ -308,13 +346,13 @@ if running:
 
 while running:
     if new_room:
-        print "Starting Game"
         m.createMap()
         m.drawMap()
         new_room = False
 
     for player in m.players.sprites():
-        m.checkPlayerBlockCollisions(player, m.blocks)                
+        m.checkPlayerBlockCollisions(player, m.blocks)
+        m.checkPlayerCoinsCollisions(player, m.Coins)                
 
         player.setNormalForce()
         player.setFriction()
@@ -336,3 +374,8 @@ while running:
         player.lastFy = player.fy
 
     v.update()
+
+    if len(m.Coins.sprites())==0:
+        running=False
+
+    clock.tick(60)
